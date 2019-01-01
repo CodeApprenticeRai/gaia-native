@@ -32,6 +32,8 @@ export default class App extends React.Component {
       newCategoryText: '',
       categoryOfQueuedOutcome: null,
       estimatedTimeOfQueuedOutcome: 0,
+      displayedTimeMinutes: 0,
+      displayedTimeSeconds: 0
 
     }
 
@@ -71,6 +73,7 @@ export default class App extends React.Component {
     this.handleIncreaseEstimate = this.handleIncreaseEstimate.bind(this);
     this.handleDecreaseEstimate = this.handleDecreaseEstimate.bind(this);
     this.handleStartOutcome = this.handleStartOutcome.bind(this);
+    this.countdown = this.countdown.bind(this);
   }
 
   validateText(text){
@@ -111,9 +114,9 @@ export default class App extends React.Component {
     });
   }
 
-  handlecategoryOfQueuedOutcomeChosen( category_id, index ){
+  handlecategoryOfQueuedOutcomeChosen( categoryObj, index ){
     let stateCopy = this.state;
-    stateCopy.categoryOfQueuedOutcome = category_id;
+    stateCopy.categoryOfQueuedOutcome = categoryObj.category_id;
     this.setState( stateCopy );
   }
 
@@ -156,6 +159,27 @@ export default class App extends React.Component {
     this.setState( stateCopy );
   }
 
+  countdown(){
+    let stateCopy = this.state;
+    // Initiate Timer Tick,
+    if (this.state.displayedTimeMinutes % 15 == 0){
+      // play 'beep beep' sound
+    }
+
+    if ( this.state.displayedTimeMinutes == 0 ){
+
+    } else {
+        if ( this.state.displayedTimeSeconds == 0 ){
+          stateCopy.displayedTimeMinutes -= 1;
+          stateCopy.displayedTimeSeconds = 59;
+        } else {
+          stateCopy.displayedTimeSeconds -= 1;
+        }
+    }
+
+    this.setState( stateCopy );
+  }
+
   handleStartOutcome(){
     // Is Time Non-Zero
     if ( this.state.estimatedTimeOfQueuedOutcome == 0 ){
@@ -170,18 +194,29 @@ export default class App extends React.Component {
     console.log(`Current Time: ${currentTime}\nEstimated Completion Time: ${estimatedCompletionTime}\nCategory Id: ${this.state.categoryOfQueuedOutcome}`);
 
 
+
     db.transaction( (tx) => {
       tx.executeSql( addOutcomeLogEntry, [ currentTime, estimatedCompletionTime,  this.state.categoryOfQueuedOutcome ], ()=>{}, logIt);
 
       tx.executeSql( getLastNOutcomeLogEntries, [ 5 ], ( this_transaction, results) =>{
         console.log(results);
       }, logIt);
-      
+
     });
 
 
+    let stateCopy = this.state;
+    stateCopy.displayedTimeMinutes = 60 * this.state.estimatedTimeOfQueuedOutcome;
+    stateCopy.estimatedTimeOfQueuedOutcome = 0;
 
+    this.setState( stateCopy );
+
+    setInterval( () => { this.countdown()}, 1000 );
   }
+
+
+
+
   componentDidMount(){}
 
 
@@ -192,15 +227,15 @@ export default class App extends React.Component {
       < Picker.Item
         key={categoryObj.category_id}
         label={categoryObj.category_name}
-        value={categoryObj.category_id}
+        value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
       />);
     });
 
 
     return (
-      <View>
+      <View >
         <Text>Current Outcome: Creating App Version 1 < /Text>
-        <Text>0:00:00</Text>
+        <Text style={{ textAlign: 'center', fontSize: 60 }}>{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}</Text>
 
 
         < Button title="˄" style={{ height: 50, width: 100 }}  onPress={this.handleIncreaseEstimate}/>
