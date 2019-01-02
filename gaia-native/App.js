@@ -33,7 +33,8 @@ export default class App extends React.Component {
       categoryOfQueuedOutcome: null,
       estimatedTimeOfQueuedOutcome: 0,
       displayedTimeMinutes: 0,
-      displayedTimeSeconds: 0
+      displayedTimeSeconds: 0,
+      idle: true
 
     }
 
@@ -59,11 +60,12 @@ export default class App extends React.Component {
         ( this_transaction, results ) => {
             let stateCopy = this.state;
             stateCopy.categories = results.rows._array;
-            console.log( "Got some categories for ya:\n", stateCopy.categories );
+            // console.log( "Got some categories for ya:\n", stateCopy.categories );
             this.setState( stateCopy );
         });
 
 
+      setInterval( () => { this.updateTimer()}, 1000 );
     });
 
 
@@ -73,7 +75,7 @@ export default class App extends React.Component {
     this.handleIncreaseEstimate = this.handleIncreaseEstimate.bind(this);
     this.handleDecreaseEstimate = this.handleDecreaseEstimate.bind(this);
     this.handleStartOutcome = this.handleStartOutcome.bind(this);
-    this.countdown = this.countdown.bind(this);
+    this.updateTimer = this.updateTimer.bind(this);
   }
 
   validateText(text){
@@ -159,21 +161,35 @@ export default class App extends React.Component {
     this.setState( stateCopy );
   }
 
-  countdown(){
+  updateTimer(){
     let stateCopy = this.state;
-    // Initiate Timer Tick,
-    if (this.state.displayedTimeMinutes % 15 == 0){
-      // play 'beep beep' sound
+
+
+    //if the state is idle, count up
+    if ( this.state.idle ){
+      if ( this.state.displayedTimeSeconds >= 59 ){
+        stateCopy.displayedTimeSeconds = 0;
+        stateCopy.displayedTimeMinutes += 1;
+      }
+      else {
+        stateCopy.displayedTimeSeconds += 1
+      }
     }
+    // not idle count down
+    else {
+      if (this.state.displayedTimeMinutes % 15 == 0){
+        // play 'beep beep' sound
+      }
 
-    if ( this.state.displayedTimeMinutes == 0 ){
+      if ( this.state.displayedTimeMinutes == 0 ){
 
-    } else {
-        if ( this.state.displayedTimeSeconds == 0 ){
-          stateCopy.displayedTimeMinutes -= 1;
-          stateCopy.displayedTimeSeconds = 59;
-        } else {
-          stateCopy.displayedTimeSeconds -= 1;
+      } else {
+          if ( this.state.displayedTimeSeconds == 0 ){
+            stateCopy.displayedTimeMinutes -= 1;
+            stateCopy.displayedTimeSeconds = 59;
+          } else {
+            stateCopy.displayedTimeSeconds -= 1;
+          }
         }
     }
 
@@ -194,6 +210,8 @@ export default class App extends React.Component {
     console.log(`Current Time: ${currentTime}\nEstimated Completion Time: ${estimatedCompletionTime}\nCategory Id: ${this.state.categoryOfQueuedOutcome}`);
 
 
+    // if ( this.state.idle )
+
 
     db.transaction( (tx) => {
       tx.executeSql( addOutcomeLogEntry, [ currentTime, estimatedCompletionTime,  this.state.categoryOfQueuedOutcome ], ()=>{}, logIt);
@@ -211,7 +229,7 @@ export default class App extends React.Component {
 
     this.setState( stateCopy );
 
-    setInterval( () => { this.countdown()}, 1000 );
+    setInterval( () => { this.updateTimer()}, 1000 );
   }
 
 
@@ -235,7 +253,7 @@ export default class App extends React.Component {
     return (
       <View >
         <Text>Current Outcome: Creating App Version 1 < /Text>
-        <Text style={{ textAlign: 'center', fontSize: 60 }}>{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}</Text>
+        <Text style={{ textAlign: 'center', fontSize: 60 }}>{ this.state.idle ? '-': ''}{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}</Text>
 
 
         < Button title="˄" style={{ height: 50, width: 100 }}  onPress={this.handleIncreaseEstimate}/>
