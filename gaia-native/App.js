@@ -5,10 +5,10 @@ import Expo, { SQLite } from 'expo';
 
 const db = SQLite.openDatabase('local.db');
 
-const addCategorySQL = `INSERT INTO category( category_name ) VALUES ( ? );`;
+const addCategorySQL = `INSERT INTO category( category_name ) SELECT ? WHERE NOT EXISTS( SELECT 1 FROM category WHERE category_name=? );`; //`INSERT INTO category( category_name ) VALUES ( ? );`;
 const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, category_id ) VALUES ( ?, ?, ? )`; // will need to stardardize time entries
 const getLastNOutcomeLogEntries = `SELECT * FROM outcome_log ORDER BY time_started DESC LIMIT ?`;
-const getAllCategories = `SELECT * FROM category`;
+const getAllCategories = `SELECT * FROM category WHERE category_id > 1;`;
 const getCategoryIdFromName = `SELECT * FROM category where lower(name)=lower(?)`;
 
 const MAX_ALLOWED_ESTIMATE = 1;
@@ -27,14 +27,24 @@ export default class App extends React.Component {
   constructor(props){
     super(props);
 
+
     this.state = {
       categories: [],
+      categoriesAsPickerItems: null,
       newCategoryText: '',
+
+      categoryOfCurrentOutcome: null, // artifactual declaration
+      startTimeOfCurrentOutcome:null,
+      estimatedTimeOfCurrentOutcome:null,
+
       categoryOfQueuedOutcome: null,
       estimatedTimeOfQueuedOutcome: 0,
+
+      timer: null,
       displayedTimeMinutes: 0,
       displayedTimeSeconds: 0,
-      idle: true
+      idle: true,
+
 
     }
 
@@ -42,7 +52,7 @@ export default class App extends React.Component {
     db.transaction( (tx) =>{
 
       tx.executeSql(`PRAGMA foreign_keys = ON;`, ()=>{}, logIt);
-      // tx.executeSql(`DROP TABLE outcome_log`, ()=>{}, logIt);
+      // tx.executeSql(`DROP TABLE category`, ()=>{}, logIt);
 
       tx.executeSql(`CREATE TABLE IF NOT EXISTS category(
         category_id INTEGER PRIMARY KEY UNIQUE,
@@ -56,27 +66,71 @@ export default class App extends React.Component {
         FOREIGN KEY( category_id ) REFERENCES category( category_id )
       );`, [], ()=>{}, logIt);
 
+      tx.executeSql(`INSERT INTO category( category_id, category_name ) SELECT 1, 'Idle'  WHERE NOT EXISTS ( SELECT 1 FROM category WHERE category_name='Idle' );`, [], ()=>{}, logIt);
+
+
       tx.executeSql( getAllCategories, [],
         ( this_transaction, results ) => {
             let stateCopy = this.state;
+            let date = new Date();
+            let currentTime = date.getTime();
+
             stateCopy.categories = results.rows._array;
-            // console.log( "Got some categories for ya:\n", stateCopy.categories );
+            stateCopy.categoriesAsPickerItems = stateCopy.categories.map( ( categoryObj, indexInArray) => {
+                  return(
+                  < Picker.Item
+                    key={categoryObj.category_id}
+                    label={categoryObj.category_name}
+                    value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
+                  /> );
+                });
+
+            stateCopy.estimatedTimeOfCurrentOutcome = currentTime;
+
+            if ( currentTime >= stateCopy.estimatedTimeOfCurrentOutcome ){
+              stateCopy.idle = true;
+
+              // clearInterval(this.state.timer);
+              stateCopy.categoryOfCurrentOutcome = 1;
+              stateCopy.startTimeOfCurrentOutcome = currentTime;
+              // stateCopy.estimatedTimeOfCurrentOutcome = currentTime;
+              stateCopy.timer = setInterval( () => { this.updateTimer() }, 1000 );
+            }
+
+            console.log( "Got some categories for ya:\n", stateCopy.categories );
             this.setState( stateCopy );
+
+
         });
 
-
-      setInterval( () => { this.updateTimer()}, 1000 );
     });
 
 
+    // this.startIdle();
+    var timer = setInterval( () => { this.updateTimer() }, 1000 );
+
+    this.startIdle = this.startIdle.bind(this);
     this.validateText = this.validateText.bind(this);
     this.handleNewCategory = this.handleNewCategory.bind(this);
     this.handlecategoryOfQueuedOutcomeChosen = this.handlecategoryOfQueuedOutcomeChosen.bind(this);
     this.handleIncreaseEstimate = this.handleIncreaseEstimate.bind(this);
     this.handleDecreaseEstimate = this.handleDecreaseEstimate.bind(this);
     this.handleStartOutcome = this.handleStartOutcome.bind(this);
+    this.endIdle = this.endIdle.bind(this);
     this.updateTimer = this.updateTimer.bind(this);
   }
+
+  // startIdle(){
+  //   let stateCopy = this.state;
+  //   let date = new Date();
+  //
+  //   let currentTime =  date.getTime();
+  //
+  //   stateCopy.categoryOfCurrentOutcome = 1;
+  //   stateCopy.startTimeOfCurrentOutcome = currentTime;
+  //   stateCopy.estimatedTimeOfCurrentOutcome = currentTime; // we shouldn't be having idles
+  //   this.setState( stateCopy );
+  // }
 
   validateText(text){
     if (text == ''){
@@ -105,7 +159,6 @@ export default class App extends React.Component {
       tx.executeSql( getAllCategories, [],
         ( this_transaction, results ) => {
             let stateCopy = this.state;
-
             stateCopy.categories = results.rows._array;
             stateCopy.categoryOfQueuedOutcome = stateCopy.categories[0].category_id; // will break for new users
 
@@ -122,21 +175,7 @@ export default class App extends React.Component {
     this.setState( stateCopy );
   }
 
-  // componentDidUpdate(){
 
-    // reload categories from the database
-  //   db.transaction( (tx) => {
-  //     tx.executeSql( getAllCategories, [],
-  //       ( this_transaction, results ) => {
-  //           let stateCopy = this.state;
-  //           stateCopy.categories = results.rows._array;
-  //           this.setState( stateCopy );
-  //       }
-  //
-  //     )
-  //   });
-  //
-  // }
 
   handleIncreaseEstimate(){
     let stateCopy = this.state;
@@ -161,6 +200,8 @@ export default class App extends React.Component {
     this.setState( stateCopy );
   }
 
+  // if the current category is idle before a new outcome is called to be started, this gets called
+
   updateTimer(){
     let stateCopy = this.state;
 
@@ -180,16 +221,13 @@ export default class App extends React.Component {
       if (this.state.displayedTimeMinutes % 15 == 0){
         // play 'beep beep' sound
       }
-
-      if ( this.state.displayedTimeMinutes == 0 ){
-
-      } else {
-          if ( this.state.displayedTimeSeconds == 0 ){
+      if ( this.state.displayedTimeSeconds == 0 ){
+        if ( this.state.displayedTimeMinutes > 0 ){
             stateCopy.displayedTimeMinutes -= 1;
             stateCopy.displayedTimeSeconds = 59;
-          } else {
+        }
+      } else {
             stateCopy.displayedTimeSeconds -= 1;
-          }
         }
     }
 
@@ -202,7 +240,7 @@ export default class App extends React.Component {
       Alert.alert('Estimated Outcome Time Must Be Greater Than 00.00');
       return;
     }
-
+    let stateCopy = this.state;
     var date = new Date();
     let currentTime = date.getTime();
     let estimatedCompletionTime = currentTime + hourScaleToMilliSecondScale( this.state.estimatedTimeOfQueuedOutcome );
@@ -210,9 +248,31 @@ export default class App extends React.Component {
     console.log(`Current Time: ${currentTime}\nEstimated Completion Time: ${estimatedCompletionTime}\nCategory Id: ${this.state.categoryOfQueuedOutcome}`);
 
 
-    // if ( this.state.idle )
 
 
+
+
+
+    // if the state is idle, we want to make sure that data gets recorded correctly before starting a new outcome
+    if ( this.state.idle ){
+      // this.endIdle(currentTime);
+        db.transaction( (tx) =>{
+          tx.executeSql( addOutcomeLogEntry, [ stateCopy.startTimeOfCurrentOutcome, currentTime, this.state.categoryOfCurrentOutcome], ()=>{}, logIt);
+
+          tx.executeSql( getLastNOutcomeLogEntries, [ 5 ], ( this_transaction, results) =>{
+            console.log(results);
+          }, logIt);
+
+        });
+    }
+
+    clearInterval( this.state.timer );
+
+    stateCopy.idle= false;
+    stateCopy.startTimeOfCurrentOutcome= currentTime;
+    stateCopy.estimatedTimeOfCurrentOutcome= estimatedCompletionTime;
+
+    // add upcomning outcome
     db.transaction( (tx) => {
       tx.executeSql( addOutcomeLogEntry, [ currentTime, estimatedCompletionTime,  this.state.categoryOfQueuedOutcome ], ()=>{}, logIt);
 
@@ -223,13 +283,15 @@ export default class App extends React.Component {
     });
 
 
-    let stateCopy = this.state;
+
+
+
+
     stateCopy.displayedTimeMinutes = 60 * this.state.estimatedTimeOfQueuedOutcome;
     stateCopy.estimatedTimeOfQueuedOutcome = 0;
+    stateCopy.timer = setInterval( () => { this.updateTimer()}, 1000 );
 
     this.setState( stateCopy );
-
-    setInterval( () => { this.updateTimer()}, 1000 );
   }
 
 
@@ -240,14 +302,6 @@ export default class App extends React.Component {
 
 
   render() {
-    const categoryPickerChoices = this.state.categories.map( ( categoryObj, indexInArray) => {
-      return(
-      < Picker.Item
-        key={categoryObj.category_id}
-        label={categoryObj.category_name}
-        value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
-      />);
-    });
 
 
     return (
@@ -262,7 +316,7 @@ export default class App extends React.Component {
           style={{ height: 50, width: 100 }}
           onValueChange={this.handlecategoryOfQueuedOutcomeChosen}
         >
-          { categoryPickerChoices }
+          { this.state.categoriesAsPickerItems }
         </Picker>
 
 
