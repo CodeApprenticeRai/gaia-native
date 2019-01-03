@@ -2,53 +2,125 @@ import React from 'react';
 import { StyleSheet, Text, View, Picker, Button, TextInput, Alert } from 'react-native';
 import Expo, { SQLite } from 'expo';
 
-
+// Database and SQL Queries
 const db = SQLite.openDatabase('local.db');
-
 const addCategorySQL = `INSERT INTO category( category_name ) SELECT ? WHERE NOT EXISTS( SELECT 1 FROM category WHERE category_name=? );`; //`INSERT INTO category( category_name ) VALUES ( ? );`;
 const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, category_id ) VALUES ( ?, ?, ? )`; // will need to stardardize time entries
 const getLastNOutcomeLogEntries = `SELECT * FROM outcome_log ORDER BY time_started DESC LIMIT ?`;
 const getAllCategories = `SELECT * FROM category WHERE category_id > 1;`;
 const getCategoryIdFromName = `SELECT * FROM category where lower(name)=lower(?)`;
 
+// Some Global constants and functions
 const MAX_ALLOWED_ESTIMATE = 1;
 const MIN_ALLOWED_ESTIMATE = 0;
-
 function logIt(transaction, event){
   console.log(event);
 }
-
 function hourScaleToMilliSecondScale( timeAtHourScale ){
   return Math.round( timeAtHourScale * Math.pow( 3.6, 6) );
 }
 
+class CurrentOutcomeHeader extends React.Component{
+    render(){
+      return()
+    }
+}
+class TimerDisplay extends React.Component{
+  // currentTime
+  // categoryIdOfCurrentOutcome
+  // estimatedTimeOfCompletion
+  // startTime
+
+    render(){
+      // ( this.props.currentTime - this.props.startTime )
+      return(
+          <Text
+            style={{ textAlign: 'center', fontSize: 60 }} >
+            { ( (  ) )?}{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}
+          </Text>
+      )
+    }
+}
+class NewOutcomeInputGroup extends React.Component{
+  // categoryObjs={this.state.categoryObjectsMap}
+  // queuedCategory={this.state.categoryObjectOfQueuedOutcome}
+  // timeEstimateOfQueue={this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour}
+    render(){
+
+      const categoriesAsPickerItems = this.props.categoryObjectsArray.map( ( categoryObj, indexInArray) => {
+             return(
+             < Picker.Item
+               key={categoryObj.category_id}
+               label={categoryObj.category_name}
+               value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
+             /> );
+      }
+
+      return(
+                < Button title="˄" style={{ height: 50, width: 100 }}  onPress={this.props.handleIncreaseEstimate}/>
+                <Picker
+                  style={{ height: 50, width: 100 }}
+                  onValueChange={ this.props.handlecategoryOfQueuedOutcomeChosen }
+                >
+                  { categoriesAsPickerItems }
+                <Picker/>
+
+
+                < TextInput
+                  style={{height: 40, borderColor: 'gray', borderWidth: 1}}
+                  onChangeText={ this.props.handleNewCategoryText }
+                  placeholder='Enter New Category'
+                  value={this.props.newCategoryText}
+                />
+                <Button
+                  title=" + "
+                  onPress={this.props.handleNewCategory}
+                />
+
+
+                <Text>{ '0' + Number(this.props.estimatedDurationOfCurrentQueuedAsFractionOfHour).toFixed(2) }</Text>
+                < Button title="˅" style={{ height: 50, width: 100 }} onPress={ this.props.handleDecreaseEstimate } />
+      );
+    }
+}
+
+
+class StartButton extends React.Component{
+    render(){
+      return(
+        < Button title="START" onPress={/*this.handleStartOutcome*/} />
+      )
+    }
+}
 
 export default class App extends React.Component {
   constructor(props){
     super(props);
 
+    let date = new Date();
+    let currentTime = date.getTime();
 
     this.state = {
-      categories: [],
-      categoriesAsPickerItems: null,
-      newCategoryText: '',
+      categoryObjectsArray: [],
+      categoryObjectsMap: null,
 
-      categoryOfCurrentOutcome: null, // artifactual declaration
-      startTimeOfCurrentOutcome:null,
-      estimatedTimeOfCurrentOutcome:null,
+      currentTime: null,
 
-      categoryOfQueuedOutcome: null,
-      estimatedTimeOfQueuedOutcome: 0,
+      categoryObjectOfCurrentOutcome: null, // artifactual declaration
+      startTimeOfCurrentOutcome: currentTime,
+      estimatedTimeOfCompleteionOfCurrentOutcome: currentTime,
 
-      timer: null,
-      displayedTimeMinutes: 0,
-      displayedTimeSeconds: 0,
-      idle: true,
+      newCategoryText: '', // old
 
 
+      categoryObjectOfQueuedOutcome: null,
+      estimatedDurationOfCurrentQueuedAsFractionOfHour: 0, //lol, clarity first
+
+      displayedTimeMinutes: 0, // old
+      displayedTimeSeconds: 0, // old
     }
 
-
+    // create category and outcome_log tables if not already created, get category objects and place them in state
     db.transaction( (tx) =>{
 
       tx.executeSql(`PRAGMA foreign_keys = ON;`, ()=>{}, logIt);
@@ -75,39 +147,16 @@ export default class App extends React.Component {
             let date = new Date();
             let currentTime = date.getTime();
 
-            stateCopy.categories = results.rows._array;
-            stateCopy.categoriesAsPickerItems = stateCopy.categories.map( ( categoryObj, indexInArray) => {
-                  return(
-                  < Picker.Item
-                    key={categoryObj.category_id}
-                    label={categoryObj.category_name}
-                    value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
-                  /> );
-                });
+            stateCopy.categoryObjectsArray = results.rows._array;
+            stateCopy.categoryObjectsMap = results.rows._array.reduce( ( map, categoryObj) => {
+              map[categoryObj.category_id] = categoryObj;
+              return map
+            }, {});
+      });
 
-            stateCopy.estimatedTimeOfCurrentOutcome = currentTime;
-
-            if ( currentTime >= stateCopy.estimatedTimeOfCurrentOutcome ){
-              stateCopy.idle = true;
-
-              // clearInterval(this.state.timer);
-              stateCopy.categoryOfCurrentOutcome = 1;
-              stateCopy.startTimeOfCurrentOutcome = currentTime;
-              // stateCopy.estimatedTimeOfCurrentOutcome = currentTime;
-              stateCopy.timer = setInterval( () => { this.updateTimer() }, 1000 );
-            }
-
-            console.log( "Got some categories for ya:\n", stateCopy.categories );
-            this.setState( stateCopy );
-
-
-        });
-
+        this.setState( stateCopy );
     });
 
-
-    // this.startIdle();
-    var timer = setInterval( () => { this.updateTimer() }, 1000 );
 
     this.startIdle = this.startIdle.bind(this);
     this.validateText = this.validateText.bind(this);
@@ -120,17 +169,42 @@ export default class App extends React.Component {
     this.updateTimer = this.updateTimer.bind(this);
   }
 
-  // startIdle(){
-  //   let stateCopy = this.state;
-  //   let date = new Date();
-  //
-  //   let currentTime =  date.getTime();
-  //
-  //   stateCopy.categoryOfCurrentOutcome = 1;
-  //   stateCopy.startTimeOfCurrentOutcome = currentTime;
-  //   stateCopy.estimatedTimeOfCurrentOutcome = currentTime; // we shouldn't be having idles
-  //   this.setState( stateCopy );
-  // }
+  componentDidMount(){
+    this.timeKeeper = setInterval( () => {
+      let stateCopy = this.state;
+      stateCopy.currentTime = Date.getTime();
+
+      // detect the state has changed to idle technically, and verbosely set the app state to idle
+      if ( this.state.currentTime >= this.state.estimatedTimeOfCompleteionOfCurrentOutcome ){
+        if (
+          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != typeof(undefined) ) &&
+          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != typeof(null) ) &&
+          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != 1 )
+        ){
+          stateCopy.categoryObjectOfCurrentOutcome = categoryObjectsMap[1];
+          stateCopy.startTimeOfCurrentOutcome = stateCopy.currentTime;
+          // stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour = 0; // dunno the significance of this
+          stateCopy.estimatedTimeOfCompleteionOfCurrentOutcome = stateCopy.currentTime;
+        }
+        // else // do nothing
+        this.setState( stateCopy );
+    }, 1000)
+  }
+
+  componentWillUnmount(){
+    clearInterval(this.timeKeeper);
+  }
+
+  //Checked
+  // ------------
+  //Unchecked
+
+
+
+
+
+
+
 
   validateText(text){
     if (text == ''){
@@ -159,8 +233,8 @@ export default class App extends React.Component {
       tx.executeSql( getAllCategories, [],
         ( this_transaction, results ) => {
             let stateCopy = this.state;
-            stateCopy.categories = results.rows._array;
-            stateCopy.categoryOfQueuedOutcome = stateCopy.categories[0].category_id; // will break for new users
+            stateCopy.categoryObjectsArray = results.rows._array;
+            stateCopy.categoryOfQueuedOutcome = stateCopy.categoryObjectsArray[0].category_id; // will break for new users
 
             this.setState( stateCopy );
         }
@@ -171,7 +245,7 @@ export default class App extends React.Component {
 
   handlecategoryOfQueuedOutcomeChosen( categoryObj, index ){
     let stateCopy = this.state;
-    stateCopy.categoryOfQueuedOutcome = categoryObj.category_id;
+    stateCopy.categoryObjectOfQueuedOutcome = categoryObj;
     this.setState( stateCopy );
   }
 
@@ -180,8 +254,8 @@ export default class App extends React.Component {
   handleIncreaseEstimate(){
     let stateCopy = this.state;
 
-    if ( stateCopy.estimatedTimeOfQueuedOutcome < MAX_ALLOWED_ESTIMATE ){
-      stateCopy.estimatedTimeOfQueuedOutcome += 0.25;
+    if ( stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour < MAX_ALLOWED_ESTIMATE ){
+      stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour += 0.25;
     }
     // else {} // do a neat animation that let's the user know that the max has been reached.
 
@@ -192,8 +266,8 @@ export default class App extends React.Component {
   handleDecreaseEstimate(){
     let stateCopy = this.state;
 
-    if ( stateCopy.estimatedTimeOfQueuedOutcome > MIN_ALLOWED_ESTIMATE ){
-      stateCopy.estimatedTimeOfQueuedOutcome -= 0.25;
+    if ( stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour > MIN_ALLOWED_ESTIMATE ){
+      stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour -= 0.25;
     }
     // else {} // do a neat animation that let's the user know that the max has been reached.
 
@@ -236,14 +310,14 @@ export default class App extends React.Component {
 
   handleStartOutcome(){
     // Is Time Non-Zero
-    if ( this.state.estimatedTimeOfQueuedOutcome == 0 ){
+    if ( this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour == 0 ){
       Alert.alert('Estimated Outcome Time Must Be Greater Than 00.00');
       return;
     }
     let stateCopy = this.state;
     var date = new Date();
     let currentTime = date.getTime();
-    let estimatedCompletionTime = currentTime + hourScaleToMilliSecondScale( this.state.estimatedTimeOfQueuedOutcome );
+    let estimatedCompletionTime = currentTime + hourScaleToMilliSecondScale( this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour );
 
     console.log(`Current Time: ${currentTime}\nEstimated Completion Time: ${estimatedCompletionTime}\nCategory Id: ${this.state.categoryOfQueuedOutcome}`);
 
@@ -281,68 +355,43 @@ export default class App extends React.Component {
       }, logIt);
 
     });
-
-
-
-
-
-
-    stateCopy.displayedTimeMinutes = 60 * this.state.estimatedTimeOfQueuedOutcome;
-    stateCopy.estimatedTimeOfQueuedOutcome = 0;
+    stateCopy.displayedTimeMinutes = 60 * this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour;
+    stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour = 0;
     stateCopy.timer = setInterval( () => { this.updateTimer()}, 1000 );
 
     this.setState( stateCopy );
   }
 
-
-
-
-  componentDidMount(){}
-
-
-
   render() {
-
-
     return (
-      <View >
-        <Text>Current Outcome: Creating App Version 1 < /Text>
-        <Text style={{ textAlign: 'center', fontSize: 60 }}>{ this.state.idle ? '-': ''}{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}</Text>
+      <View>
+        <CurrentOutcomeHeader />
 
-
-        < Button title="˄" style={{ height: 50, width: 100 }}  onPress={this.handleIncreaseEstimate}/>
-
-        <Picker
-          style={{ height: 50, width: 100 }}
-          onValueChange={this.handlecategoryOfQueuedOutcomeChosen}
-        >
-          { this.state.categoriesAsPickerItems }
-        </Picker>
-
-
-        < TextInput
-          style={{height: 40, borderColor: 'gray', borderWidth: 1}}
-          onChangeText={(newCategoryText) => this.setState({newCategoryText})}
-          placeholder='Enter New Category'
-          value={this.state.newCategoryText}
-        />
-        <Button
-          title=" + "
-          onPress={this.handleNewCategory}
+        <TimerDisplay
+          currentTime={this.state.currentTime}
+          categoryIdOfCurrentOutcome={this.state.categoryObjectOfCurrentOutcome.category_id}
+          estimatedTimeOfCompletion={this.state.estimatedTimeOfCompleteionOfCurrentOutcome}
+          startTime={this.state.startTimeOfCurrentOutcome}
         />
 
+        < NewOutcomeInputGroup
+          categoryObjs={this.state.categoryObjectsMap}
+          queuedCategory={this.state.categoryObjectOfQueuedOutcome}
+          estimatedDurationOfCurrentQueuedAsFractionOfHour={this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour}
+          handleIncreaseEstimate={this.handleIncreaseEstimate}
+          handleDecreaseEstimate={this.handleDecreaseEstimate}
+          handlecategoryOfQueuedOutcomeChosen={this.handlecategoryOfQueuedOutcomeChosen}
+          newCategoryText={this.state.newCategoryText}
+          handleNewCategory={this.handleNewCategory}
+        />
+        < StartButton
 
-        <Text>{ '0' + Number(this.state.estimatedTimeOfQueuedOutcome).toFixed(2) }</Text>
-        < Button title="˅" style={{ height: 50, width: 100 }} onPress={ this.handleDecreaseEstimate } />
-
-        < Button title="START" onPress={this.handleStartOutcome} />
-
-
+        />
       </View>
     );
   }
 }
-
+e
 const styles = StyleSheet.create({
   container: {
     flex: 1,
