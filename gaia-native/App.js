@@ -1,130 +1,164 @@
 import React from 'react';
 import { StyleSheet, Text, View, Picker, Button, TextInput, Alert } from 'react-native';
+import  DialogInput from 'react-native-dialog-input'
 import Expo, { SQLite } from 'expo';
 
-// Database and SQL Queries
 const db = SQLite.openDatabase('local.db');
-const addCategorySQL = `INSERT INTO category( category_name ) SELECT ? WHERE NOT EXISTS( SELECT 1 FROM category WHERE category_name=? );`; //`INSERT INTO category( category_name ) VALUES ( ? );`;
-const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, category_id ) VALUES ( ?, ?, ? )`; // will need to stardardize time entries
-const getLastNOutcomeLogEntries = `SELECT * FROM outcome_log ORDER BY time_started DESC LIMIT ?`;
 const getAllCategories = `SELECT * FROM category WHERE category_id > 1;`;
-const getCategoryIdFromName = `SELECT * FROM category where lower(name)=lower(?)`;
+const addCategorySQL = `INSERT INTO category( category_name ) SELECT ? WHERE NOT EXISTS( SELECT 1 FROM category WHERE category_name=? );`; //`INSERT INTO category( category_name ) VALUES ( ? );`;
+const getCategoryFromName = `SELECT * FROM category where lower(name)=lower(?)`;
+const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, outcome_title, category_id ) VALUES ( ?, ?, ?, ? )`; // will need to stardardize time entries
+const getLastNOutcomeLogEntries = `SELECT * FROM outcome_log ORDER BY time_started DESC LIMIT ?`;
 
-// Some Global constants and functions
 const MAX_ALLOWED_ESTIMATE = 1;
 const MIN_ALLOWED_ESTIMATE = 0;
+
 function logIt(transaction, event){
   console.log(event);
 }
-function hourScaleToMilliSecondScale( timeAtHourScale ){
-  return Math.round( timeAtHourScale * Math.pow( 3.6, 6) );
+
+//no numbers, max 2 spaces, no special chars / punctuation
+function validateText(text){
+  return true;
 }
 
-class CurrentOutcomeHeader extends React.Component{
-    render(){
-      return()
+
+/*
+Tasks:
+  1.1 Can Create New Category By Entering it into a Input Area,
+    1.2. Can Create New Category From a Modal, 1,
+
+  2. Can Create a new Outcome by entering it into an Input Area, 1,
+
+  3. Can Start a New Outcome,
+    New Outcome Posted with correct times,
+    On TimeOver: Idle
+    !!!!On New Outcome Started after Idle: Post CurrentTime - EstimatedEndOfCurrentOutcome as Idle Entry
+    After NewOutcomeStartedAfterIdle POST IDLE TIIME, 1,
+
+  Can Display TimeLeft,1,
+  Can Display TimeOver,1,
+
+  Shows Current { Category, Outcome }, 1,
+
+  4. Styling ...
+
+
+*/
+
+class Timer extends React.Component{
+  render(){
+    var minutes = Math.floor( Math.abs(this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime) / (1000 * 60)  );
+
+
+    if ( ( Math.abs( this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime ) / (1000 * 60) ) < 10){
+      minutes = '0'  + minutes;
     }
-}
-class TimerDisplay extends React.Component{
-  // currentTime
-  // categoryIdOfCurrentOutcome
-  // estimatedTimeOfCompletion
-  // startTime
 
-    render(){
-      // ( this.props.currentTime - this.props.startTime )
+
+
+    var seconds = Math.abs( Math.round( ( (this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime) / (1000)  ) % 60 ) );
+
+    if ( seconds < 10){
+      seconds = '0'  + seconds;
+    }
+
+    return(
+      <Text
+        style={styles.timerDisplay}
+      >
+      { minutes + ':' + seconds }
+      </Text>
+    )
+  }
+}
+
+class StartButton extends React.Component {
+
+  render(){
+    return(
+      < Button
+        title="START"
+        onPress={this.props.handleStartOutcome}
+      />
+    );
+  }
+}
+
+class NewOutcomeInputGroup extends React.Component {
+  componentDidMount(){
+  }
+
+  render(){
+    var categoriesAsPickerItems = this.props.categories.map( ( categoryObj, indexInArray) => {
       return(
-          <Text
-            style={{ textAlign: 'center', fontSize: 60 }} >
-            { ( (  ) )?}{this.state.displayedTimeMinutes}:{this.state.displayedTimeSeconds}
-          </Text>
-      )
-    }
-}
-class NewOutcomeInputGroup extends React.Component{
-  // categoryObjs={this.state.categoryObjectsMap}
-  // queuedCategory={this.state.categoryObjectOfQueuedOutcome}
-  // timeEstimateOfQueue={this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour}
-    render(){
+        < Picker.Item
+        key={categoryObj.category_id}
+        label={categoryObj.category_name}
+        value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
+        /> );
+      });
 
-      const categoriesAsPickerItems = this.props.categoryObjectsArray.map( ( categoryObj, indexInArray) => {
-             return(
-             < Picker.Item
-               key={categoryObj.category_id}
-               label={categoryObj.category_name}
-               value={categoryObj}  // breaks: refreshes to an unselected picker item immediately after select, when should keep selected item
-             /> );
-      }
+    // selectedValue={}
+    // style={}
+    // onValueChange={}
 
-      return(
-                < Button title="˄" style={{ height: 50, width: 100 }}  onPress={this.props.handleIncreaseEstimate}/>
-                <Picker
-                  style={{ height: 50, width: 100 }}
-                  onValueChange={ this.props.handlecategoryOfQueuedOutcomeChosen }
-                >
-                  { categoriesAsPickerItems }
-                <Picker/>
+    // <Picker.Item label='Example' value='exmaple' />
+    return(
+      <View>
+             < Button title="˄"  onPress={this.props.handleIncreaseEstimate}/>
+
+             <Picker
+                onValueChange={ (itemValue, itemIndex) => { this.props.handleCategorySelected(itemValue, itemIndex) } }
+              >
+              { categoriesAsPickerItems  }
+              <Picker.Item label='Create New Category' value='new' />
+             </Picker>
+
+             <TextInput
+              placeholder='Title of Outcome'
+              onChangeText={ (text) => { this.props.setTitleOfQueuedOutcome(text) } }
+             />
 
 
-                < TextInput
-                  style={{height: 40, borderColor: 'gray', borderWidth: 1}}
-                  onChangeText={ this.props.handleNewCategoryText }
-                  placeholder='Enter New Category'
-                  value={this.props.newCategoryText}
-                />
-                <Button
-                  title=" + "
-                  onPress={this.props.handleNewCategory}
-                />
+             <Text
+              style={styles.estimateText}
+             >
+              { '0' + Number(this.props.estimatedDurationOfQueuedOutcome).toFixed(2) }
+            </Text>
 
-
-                <Text>{ '0' + Number(this.props.estimatedDurationOfCurrentQueuedAsFractionOfHour).toFixed(2) }</Text>
-                < Button title="˅" style={{ height: 50, width: 100 }} onPress={ this.props.handleDecreaseEstimate } />
-      );
-    }
-}
-
-
-class StartButton extends React.Component{
-    render(){
-      return(
-        < Button title="START" onPress={/*this.handleStartOutcome*/} />
-      )
-    }
+             < Button title="˅"  onPress={ this.props.handleDecreaseEstimate } />
+      </View>
+    );
+  }
 }
 
 export default class App extends React.Component {
   constructor(props){
     super(props);
 
-    let date = new Date();
-    let currentTime = date.getTime();
-
     this.state = {
-      categoryObjectsArray: [],
-      categoryObjectsMap: null,
 
+      currentOutcomeTitle: null,
       currentTime: null,
-
-      categoryObjectOfCurrentOutcome: null, // artifactual declaration
-      startTimeOfCurrentOutcome: currentTime,
-      estimatedTimeOfCompleteionOfCurrentOutcome: currentTime,
-
-      newCategoryText: '', // old
+      startTimeOfCurrentOutcome: null,
+      estimatedCompletionTimeOfCurrentOutcome: null,
 
 
-      categoryObjectOfQueuedOutcome: null,
-      estimatedDurationOfCurrentQueuedAsFractionOfHour: 0, //lol, clarity first
 
-      displayedTimeMinutes: 0, // old
-      displayedTimeSeconds: 0, // old
+      categories: [],
+      // createNewCategoryFormIsVisible: false,
+      // newCategoryName: '',
+
+      queuedCategory: null, // is an object
+      titleOfQueuedOutcome: null,
+      estimatedDurationOfQueuedOutcome: 0, // is 1 = 1 hr
     }
 
-    // create category and outcome_log tables if not already created, get category objects and place them in state
     db.transaction( (tx) =>{
 
       tx.executeSql(`PRAGMA foreign_keys = ON;`, ()=>{}, logIt);
-      // tx.executeSql(`DROP TABLE category`, ()=>{}, logIt);
+      // tx.executeSql(`DROP TABLE outcome_log`, ()=>{}, logIt);
 
       tx.executeSql(`CREATE TABLE IF NOT EXISTS category(
         category_id INTEGER PRIMARY KEY UNIQUE,
@@ -134,270 +168,231 @@ export default class App extends React.Component {
       tx.executeSql(`CREATE TABLE IF NOT EXISTS outcome_log (
         time_started INTEGER PRIMARY KEY UNIQUE NOT NULL,
         time_ended INTEGER UNIQUE NOT NULL,
+        outcome_title TEXT,
         category_id INTEGER NOT NULL,
         FOREIGN KEY( category_id ) REFERENCES category( category_id )
       );`, [], ()=>{}, logIt);
 
-      tx.executeSql(`INSERT INTO category( category_id, category_name ) SELECT 1, 'Idle'  WHERE NOT EXISTS ( SELECT 1 FROM category WHERE category_name='Idle' );`, [], ()=>{}, logIt);
-
-
       tx.executeSql( getAllCategories, [],
         ( this_transaction, results ) => {
             let stateCopy = this.state;
-            let date = new Date();
-            let currentTime = date.getTime();
+            stateCopy.categories = results.rows._array;
 
-            stateCopy.categoryObjectsArray = results.rows._array;
-            stateCopy.categoryObjectsMap = results.rows._array.reduce( ( map, categoryObj) => {
-              map[categoryObj.category_id] = categoryObj;
-              return map
-            }, {});
+            // stateCopy.categoriesMap = results.rows._array.reduce( ( map, categoryObj) => {
+              // map[categoryObj.category_id] = categoryObj;
+              // return map
+            // }, {});
+
+            this.setState( stateCopy );
       });
-
-        this.setState( stateCopy );
     });
 
-
-    this.startIdle = this.startIdle.bind(this);
-    this.validateText = this.validateText.bind(this);
-    this.handleNewCategory = this.handleNewCategory.bind(this);
-    this.handlecategoryOfQueuedOutcomeChosen = this.handlecategoryOfQueuedOutcomeChosen.bind(this);
     this.handleIncreaseEstimate = this.handleIncreaseEstimate.bind(this);
     this.handleDecreaseEstimate = this.handleDecreaseEstimate.bind(this);
+    this.handleCategorySelected = this.handleCategorySelected.bind(this);
+    // this.makeCreateNewCategoryFormVisble = this.makeCreateNewCategoryFormVisble.bind(this);
+    this.getCategoriesFromDatabase = this.getCategoriesFromDatabase.bind(this);
+
+    this.setTitleOfQueuedOutcome = this.setTitleOfQueuedOutcome.bind(this);
+
     this.handleStartOutcome = this.handleStartOutcome.bind(this);
-    this.endIdle = this.endIdle.bind(this);
-    this.updateTimer = this.updateTimer.bind(this);
   }
 
+  getCategoriesFromDatabase(){
+        db.transaction( (tx) =>{
+          tx.executeSql( getAllCategories, [],
+            ( this_transaction, results ) => {
+                let stateCopy = this.state;
+                stateCopy.categories = results.rows._array;
+                // stateCopy.categoriesMap = results.rows._array.reduce( ( map, categoryObj) => {
+                  // map[categoryObj.category_id] = categoryObj;
+                  // return map
+                // }, {});
+                this.setState( stateCopy );
+          });
+        });
+  }
+  handleCategorySelected(itemValue, itemIndex){
+    //change queued category to whatever is selected
+    let stateCopy = this.state;
+    /*
+      If the item value is new, we want to make the modal visible,
+      so that we can take in a new category
+    */
+    stateCopy.queuedCategory = itemValue;
+    this.setState( stateCopy );
+  }
+  createNewCategory( categoryName ){
+      let proceed = validateText( categoryName );
+      if (proceed){
+        db.transaction( (tx) => {
+          tx.executeSql( addCategorySQL, [ categoryName ], ()=>{}, logIt );
+          // tx.executeSql( getCategoryFromName, [ categoryName ], ( _tx, results)=>{
+          // }, logIt );
+
+          let stateCopy = this.state;
+          stateCopy.queuedCategory = null; // to disable DialogInput Visibility
+          this.setState( stateCopy );
+        });
+      } else {
+        Alert.alert('Category text doesnt check out.');
+      }
+
+
+      this.getCategoriesFromDatabase(); // to refresh categories
+  }
+  setTitleOfQueuedOutcome( newOutcomeTitle ){
+    let stateCopy = this.state;
+    stateCopy.titleOfQueuedOutcome = newOutcomeTitle;
+
+    this.setState( stateCopy );
+  }
+  handleIncreaseEstimate(){
+    let stateCopy = this.state;
+
+    if ( stateCopy.estimatedDurationOfQueuedOutcome < MAX_ALLOWED_ESTIMATE ){
+      stateCopy.estimatedDurationOfQueuedOutcome += 0.25;
+    }
+    // else {} // do a neat animation that let's the user know that the max has been reached.
+
+    this.setState( stateCopy );
+  }
+  handleDecreaseEstimate(){
+    let stateCopy = this.state;
+
+    if ( stateCopy.estimatedDurationOfQueuedOutcome > MIN_ALLOWED_ESTIMATE ){
+      stateCopy.estimatedDurationOfQueuedOutcome -= 0.25;
+    }
+    // else {} // do a neat animation that let's the user know that the max has been reached.
+
+    this.setState( stateCopy );
+  }
+  handleStartOutcome(){
+    if ( typeof(this.state.queuedCategory) != typeof(this.state.categories[0]) ){
+      alert( 'Choose a Category');
+      return;
+    } else if ( this.state.estimatedDurationOfQueuedOutcome <= 0 ){
+      alert( 'Set an Estimate');
+      return;
+    } else {
+      let date = new Date();
+      let currentTime = date.getTime();
+      if ( this.state.currentTime > this.state.estimatedCompletionTimeOfCurrentOutcome ){ // create an outcome entry for idle
+        db.transaction( (tx) => {
+          tx.executeSql( addOutcomeLogEntry, [ this.state.estimatedCompletionTimeOfCurrentOutcome, currentTime, 'Idle', 1], ()=>{}, logIt)
+        });
+      }
+
+      db.transaction( (tx) => {
+        let stateCopy = this.state;
+
+        stateCopy.currentOutcome = this.state.queuedCategory;
+        stateCopy.currentOutcomeTitle = this.state.titleOfQueuedOutcome;
+        stateCopy.startTimeOfCurrentOutcome = currentTime;
+        stateCopy.estimatedCompletionTimeOfCurrentOutcome = currentTime + this.state.estimatedDurationOfQueuedOutcome * 3600 * 1000;
+
+
+        tx.executeSql( addOutcomeLogEntry, [ currentTime, stateCopy.estimatedCompletionTimeOfCurrentOutcome, stateCopy.currentOutcomeTitle, stateCopy.currentOutcome.category_id ], ()=>{}, logIt);
+
+
+        tx.executeSql( getLastNOutcomeLogEntries, [ 100 ], ( this_transaction, results) =>{
+          console.log(results);
+        }, logIt);
+
+        stateCopy.queuedCategory = null;
+        stateCopy.titleOfQueuedOutcome = null;
+        stateCopy.estimatedDurationOfQueuedOutcome = 0;
+
+        this.setState( stateCopy );
+      });
+
+    }
+  }
   componentDidMount(){
     this.timeKeeper = setInterval( () => {
       let stateCopy = this.state;
-      stateCopy.currentTime = Date.getTime();
+      var date = new Date();
+      let currentTime = date.getTime();
+      stateCopy.currentTime = currentTime;
 
-      // detect the state has changed to idle technically, and verbosely set the app state to idle
-      if ( this.state.currentTime >= this.state.estimatedTimeOfCompleteionOfCurrentOutcome ){
-        if (
-          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != typeof(undefined) ) &&
-          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != typeof(null) ) &&
-          ( typeof( state.categoryObjectOfCurrentOutcome.category_id ) != 1 )
-        ){
-          stateCopy.categoryObjectOfCurrentOutcome = categoryObjectsMap[1];
-          stateCopy.startTimeOfCurrentOutcome = stateCopy.currentTime;
-          // stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour = 0; // dunno the significance of this
-          stateCopy.estimatedTimeOfCompleteionOfCurrentOutcome = stateCopy.currentTime;
-        }
-        // else // do nothing
-        this.setState( stateCopy );
-    }, 1000)
+      if (this.state.estimatedCompletionTimeOfCurrentOutcome == null ){
+        stateCopy.estimatedCompletionTimeOfCurrentOutcome = currentTime;
+      }
+      if (this.state.startTimeOfCurrentOutcome == null){
+        stateCopy.startTimeOfCurrentOutcome = currentTime;
+      }
+
+      this.setState( stateCopy );
+    }, 1000);
   }
-
   componentWillUnmount(){
     clearInterval(this.timeKeeper);
   }
 
-  //Checked
-  // ------------
-  //Unchecked
+  render(){
+    return(
+      <View style={styles.container}>
+
+          <Timer
+            currentTime={this.state.currentTime }
+            estimatedCompletionTimeOfCurrentOutcome={this.state.estimatedCompletionTimeOfCurrentOutcome}
+          />
 
 
+          <NewOutcomeInputGroup
+            estimatedDurationOfQueuedOutcome={this.state.estimatedDurationOfQueuedOutcome}
+            handleIncreaseEstimate={this.handleIncreaseEstimate}
+            handleDecreaseEstimate={this.handleDecreaseEstimate}
+            categories={this.state.categories}
+            handleCategorySelected={this.handleCategorySelected}
+            queuedCategory={this.state.queuedCategory}
+            newCategoryName={this.state.newCategoryName}
+            setTitleOfQueuedOutcome={this.setTitleOfQueuedOutcome}
+
+          />
+
+          <StartButton
+            handleStartOutcome={this.handleStartOutcome}
+          />
 
 
-
-
-
-
-  validateText(text){
-    if (text == ''){
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  handleNewCategory(){
-    let categoryStringChecksOut = this.validateText( this.state.newCategoryText );
-
-    if ( categoryStringChecksOut ){
-
-      db.transaction( (tx) => {
-        tx.executeSql( addCategorySQL, [ this.state.newCategoryText ], ()=>{}, logIt );
-      });
-
-    }
-    else {
-      Alert.alert('Category text doesnt check out.');
-    }
-
-    // update categories
-    db.transaction( (tx) => {
-      tx.executeSql( getAllCategories, [],
-        ( this_transaction, results ) => {
-            let stateCopy = this.state;
-            stateCopy.categoryObjectsArray = results.rows._array;
-            stateCopy.categoryOfQueuedOutcome = stateCopy.categoryObjectsArray[0].category_id; // will break for new users
-
-            this.setState( stateCopy );
-        }
-
-      )
-    });
-  }
-
-  handlecategoryOfQueuedOutcomeChosen( categoryObj, index ){
-    let stateCopy = this.state;
-    stateCopy.categoryObjectOfQueuedOutcome = categoryObj;
-    this.setState( stateCopy );
-  }
-
-
-
-  handleIncreaseEstimate(){
-    let stateCopy = this.state;
-
-    if ( stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour < MAX_ALLOWED_ESTIMATE ){
-      stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour += 0.25;
-    }
-    // else {} // do a neat animation that let's the user know that the max has been reached.
-
-    this.setState( stateCopy );
-  }
-
-
-  handleDecreaseEstimate(){
-    let stateCopy = this.state;
-
-    if ( stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour > MIN_ALLOWED_ESTIMATE ){
-      stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour -= 0.25;
-    }
-    // else {} // do a neat animation that let's the user know that the max has been reached.
-
-    this.setState( stateCopy );
-  }
-
-  // if the current category is idle before a new outcome is called to be started, this gets called
-
-  updateTimer(){
-    let stateCopy = this.state;
-
-
-    //if the state is idle, count up
-    if ( this.state.idle ){
-      if ( this.state.displayedTimeSeconds >= 59 ){
-        stateCopy.displayedTimeSeconds = 0;
-        stateCopy.displayedTimeMinutes += 1;
-      }
-      else {
-        stateCopy.displayedTimeSeconds += 1
-      }
-    }
-    // not idle count down
-    else {
-      if (this.state.displayedTimeMinutes % 15 == 0){
-        // play 'beep beep' sound
-      }
-      if ( this.state.displayedTimeSeconds == 0 ){
-        if ( this.state.displayedTimeMinutes > 0 ){
-            stateCopy.displayedTimeMinutes -= 1;
-            stateCopy.displayedTimeSeconds = 59;
-        }
-      } else {
-            stateCopy.displayedTimeSeconds -= 1;
-        }
-    }
-
-    this.setState( stateCopy );
-  }
-
-  handleStartOutcome(){
-    // Is Time Non-Zero
-    if ( this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour == 0 ){
-      Alert.alert('Estimated Outcome Time Must Be Greater Than 00.00');
-      return;
-    }
-    let stateCopy = this.state;
-    var date = new Date();
-    let currentTime = date.getTime();
-    let estimatedCompletionTime = currentTime + hourScaleToMilliSecondScale( this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour );
-
-    console.log(`Current Time: ${currentTime}\nEstimated Completion Time: ${estimatedCompletionTime}\nCategory Id: ${this.state.categoryOfQueuedOutcome}`);
-
-
-
-
-
-
-
-    // if the state is idle, we want to make sure that data gets recorded correctly before starting a new outcome
-    if ( this.state.idle ){
-      // this.endIdle(currentTime);
-        db.transaction( (tx) =>{
-          tx.executeSql( addOutcomeLogEntry, [ stateCopy.startTimeOfCurrentOutcome, currentTime, this.state.categoryOfCurrentOutcome], ()=>{}, logIt);
-
-          tx.executeSql( getLastNOutcomeLogEntries, [ 5 ], ( this_transaction, results) =>{
-            console.log(results);
-          }, logIt);
-
-        });
-    }
-
-    clearInterval( this.state.timer );
-
-    stateCopy.idle= false;
-    stateCopy.startTimeOfCurrentOutcome= currentTime;
-    stateCopy.estimatedTimeOfCurrentOutcome= estimatedCompletionTime;
-
-    // add upcomning outcome
-    db.transaction( (tx) => {
-      tx.executeSql( addOutcomeLogEntry, [ currentTime, estimatedCompletionTime,  this.state.categoryOfQueuedOutcome ], ()=>{}, logIt);
-
-      tx.executeSql( getLastNOutcomeLogEntries, [ 5 ], ( this_transaction, results) =>{
-        console.log(results);
-      }, logIt);
-
-    });
-    stateCopy.displayedTimeMinutes = 60 * this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour;
-    stateCopy.estimatedDurationOfCurrentQueuedAsFractionOfHour = 0;
-    stateCopy.timer = setInterval( () => { this.updateTimer()}, 1000 );
-
-    this.setState( stateCopy );
-  }
-
-  render() {
-    return (
-      <View>
-        <CurrentOutcomeHeader />
-
-        <TimerDisplay
-          currentTime={this.state.currentTime}
-          categoryIdOfCurrentOutcome={this.state.categoryObjectOfCurrentOutcome.category_id}
-          estimatedTimeOfCompletion={this.state.estimatedTimeOfCompleteionOfCurrentOutcome}
-          startTime={this.state.startTimeOfCurrentOutcome}
-        />
-
-        < NewOutcomeInputGroup
-          categoryObjs={this.state.categoryObjectsMap}
-          queuedCategory={this.state.categoryObjectOfQueuedOutcome}
-          estimatedDurationOfCurrentQueuedAsFractionOfHour={this.state.estimatedDurationOfCurrentQueuedAsFractionOfHour}
-          handleIncreaseEstimate={this.handleIncreaseEstimate}
-          handleDecreaseEstimate={this.handleDecreaseEstimate}
-          handlecategoryOfQueuedOutcomeChosen={this.handlecategoryOfQueuedOutcomeChosen}
-          newCategoryText={this.state.newCategoryText}
-          handleNewCategory={this.handleNewCategory}
-        />
-        < StartButton
-
-        />
+          <DialogInput
+            isDialogVisible={typeof(this.state.queuedCategory) == typeof('new')}
+            title={'New Category'}
+            hintInput={'Enter New Category'}
+            submitInput={ (inputText) => { this.createNewCategory(inputText) } }
+            closeDialog={ () => { this.showDialog(false) } }
+          >
+          </DialogInput>
       </View>
     );
   }
 }
-e
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff', // #37FF96
-    alignItems: 'center',
+    // backgroundColor: '#fff', // #37FF96
+    // alignItems: 'center',
     justifyContent: 'center',
+    // paddingHorizontal: 10
   },
+  timerDisplay:{
+    textAlign: 'center'
+  },
+  buttonGroup: {
+    // flex: 1,
+    height: 50,
+    width: 10
+  },
+  estimateText: {
+    // flex: 1,
+    // alignItems: 'center',
+    textAlign: 'center',
+    fontSize: 50,
+    borderRadius: 5,
+    borderColor: '#000',
+    borderWidth: 5
+  }
 
 });
