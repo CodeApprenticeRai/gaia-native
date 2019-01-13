@@ -46,7 +46,21 @@ Tasks:
 
 */
 
-class Timer extends React.Component{
+class CurrentOutcomeHeader extends React.Component {
+
+  render(){
+
+    return(
+      <Text
+        style={styles.currentOutcomeHeader}
+      >
+        { this.props.currentOutcome != null ? this.props.currentOutcome.category_name  + ": " + this.props.currentOutcomeTitle : 'Trading and Investments: Write Moving Average Convergence Divergence Algorithm' }
+      </Text>
+    )
+  }
+}
+
+class TimerDisplay extends React.Component{
   render(){
     var minutes = Math.floor( Math.abs(this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime) / (1000 * 60)  );
 
@@ -55,7 +69,9 @@ class Timer extends React.Component{
       minutes = '0'  + minutes;
     }
 
-
+    if ( ( ( this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime ) / (1000 * 60) ) < 0){
+      minutes = '-' + minutes;
+    }
 
     var seconds = Math.abs( Math.round( ( (this.props.estimatedCompletionTimeOfCurrentOutcome - this.props.currentTime) / (1000)  ) % 60 ) );
 
@@ -78,6 +94,7 @@ class StartButton extends React.Component {
   render(){
     return(
       < Button
+        style={styles.startButton}
         title="START"
         onPress={this.props.handleStartOutcome}
       />
@@ -105,29 +122,35 @@ class NewOutcomeInputGroup extends React.Component {
 
     // <Picker.Item label='Example' value='exmaple' />
     return(
-      <View>
-             < Button title="˄"  onPress={this.props.handleIncreaseEstimate}/>
+      <View
+        style={styles.newOutcomeInputGroup}
+      >
 
-             <Picker
-                onValueChange={ (itemValue, itemIndex) => { this.props.handleCategorySelected(itemValue, itemIndex) } }
-              >
-              { categoriesAsPickerItems  }
-              <Picker.Item label='Create New Category' value='new' />
-             </Picker>
+            < Button title="˄"  onPress={this.props.handleIncreaseEstimate}/>
 
-             <TextInput
-              placeholder='Title of Outcome'
-              onChangeText={ (text) => { this.props.setTitleOfQueuedOutcome(text) } }
-             />
+            <Picker
+               style={styles.pickerGroup}
+               onValueChange={ (itemValue, itemIndex) => { this.props.handleCategorySelected(itemValue, itemIndex) } }
+             >
+             { categoriesAsPickerItems  }
+             <Picker.Item label='Create New Category' value='new' />
+            </Picker>
+
+            <TextInput
+             placeholder='Title of Outcome'
+             onChangeText={ (text) => { this.props.setTitleOfQueuedOutcome(text) } }
+            />
 
 
              <Text
-              style={styles.estimateText}
+             style={styles.estimateText}
              >
-              { '0' + Number(this.props.estimatedDurationOfQueuedOutcome).toFixed(2) }
-            </Text>
+             { '0' + Number(this.props.estimatedDurationOfQueuedOutcome).toFixed(2) }
+             </Text>
+
 
              < Button title="˅"  onPress={ this.props.handleDecreaseEstimate } />
+
       </View>
     );
   }
@@ -139,6 +162,7 @@ export default class App extends React.Component {
 
     this.state = {
 
+      currentOutcome: null,
       currentOutcomeTitle: null,
       currentTime: null,
       startTimeOfCurrentOutcome: null,
@@ -332,8 +356,12 @@ export default class App extends React.Component {
   render(){
     return(
       <View style={styles.container}>
+          <CurrentOutcomeHeader
+            currentOutcome={this.state.currentOutcome}
+            currentOutcomeTitle={this.state.currentOutcomeTitle}
+          />
 
-          <Timer
+          <TimerDisplay
             currentTime={this.state.currentTime }
             estimatedCompletionTimeOfCurrentOutcome={this.state.estimatedCompletionTimeOfCurrentOutcome}
           />
@@ -371,28 +399,50 @@ export default class App extends React.Component {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    paddingTop: 25,
     // backgroundColor: '#fff', // #37FF96
     // alignItems: 'center',
-    justifyContent: 'center',
-    // paddingHorizontal: 10
+    // justifyContent: 'center',
+    paddingHorizontal: 10,
+    // backgroundColor: '#16a1f7',
+  },
+  currentOutcomeHeader:{
+    textAlign: 'center',
+    fontSize: 20,
+    maxHeight: 65,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    // flex: 1/12,
+  },
+  pickerGroup: {
+    borderWidth: 1
   },
   timerDisplay:{
-    textAlign: 'center'
+    textAlign: 'center',
+    borderRadius: 10,
+    borderWidth: 5,
+    fontSize: 85,
+    backgroundColor: '#fff',
+    marginBottom: 15,
   },
-  buttonGroup: {
+  startButton: {
     // flex: 1,
-    height: 50,
-    width: 10
+    // height: 50,
+    // width: 10
+    minHeight: 80,
+  },
+  newOutcomeInputGroup: {
+    backgroundColor: '#fff',
+    marginBottom: 5
   },
   estimateText: {
     // flex: 1,
     // alignItems: 'center',
     textAlign: 'center',
-    fontSize: 50,
-    borderRadius: 5,
+    // fontSize: 50,
+    borderRadius: 1,
     borderColor: '#000',
-    borderWidth: 5
+    borderWidth: 1
   }
 
 });

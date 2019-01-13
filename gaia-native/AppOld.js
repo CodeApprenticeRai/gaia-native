@@ -5,7 +5,7 @@ import Expo, { SQLite } from 'expo';
 // Database and SQL Queries
 const db = SQLite.openDatabase('local.db');
 const addCategorySQL = `INSERT INTO category( category_name ) SELECT ? WHERE NOT EXISTS( SELECT 1 FROM category WHERE category_name=? );`; //`INSERT INTO category( category_name ) VALUES ( ? );`;
-const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, category_id ) VALUES ( ?, ?, ? )`; // will need to stardardize time entries
+const addOutcomeLogEntry = `INSERT INTO outcome_log( time_started, time_ended, outcome_title,  category_id ) VALUES ( ?, ?, ? )`; // will need to stardardize time entries
 const getLastNOutcomeLogEntries = `SELECT * FROM outcome_log ORDER BY time_started DESC LIMIT ?`;
 const getAllCategories = `SELECT * FROM category WHERE category_id > 1;`;
 const getCategoryIdFromName = `SELECT * FROM category where lower(name)=lower(?)`;
