@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Picker, Button, TextInput, Alert } from 'react-native';
+import { StyleSheet, Text, View, Picker, Button, TextInput, Alert, TouchableOpacity } from 'react-native';
 import  DialogInput from 'react-native-dialog-input'
 import Expo, { SQLite } from 'expo';
 
@@ -54,7 +54,7 @@ class CurrentOutcomeHeader extends React.Component {
       <Text
         style={styles.currentOutcomeHeader}
       >
-        { this.props.currentOutcome != null ? this.props.currentOutcome.category_name  + ": " + this.props.currentOutcomeTitle : 'Trading and Investments: Write Moving Average Convergence Divergence Algorithm' }
+        { this.props.currentOutcome != null ? this.props.currentOutcome.category_name  + ": " + this.props.currentOutcomeTitle : 'IDLE / Current Outcome is NULL' }
       </Text>
     )
   }
@@ -89,18 +89,27 @@ class TimerDisplay extends React.Component{
   }
 }
 
-class StartButton extends React.Component {
-
+class CustomButton extends React.Component{
   render(){
-    return(
-      < Button
-        style={styles.startButton}
-        title="START"
-        onPress={this.props.handleStartOutcome}
-      />
-    );
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity
+          style={styles.customBtnBG}
+          onPress={() => {this.props.handleStartOutcome()}}
+        >
+          <Text style={styles.customBtnText}>{this.props.textToShow}</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 }
+
+// class StartButton extends React.Component {
+//   render(){
+//     const startText = 'START';
+//     return(<CustomButton  />);
+//   }
+// }
 
 class NewOutcomeInputGroup extends React.Component {
   componentDidMount(){
@@ -130,23 +139,27 @@ class NewOutcomeInputGroup extends React.Component {
 
             <Picker
                style={styles.pickerGroup}
+               selectedValue={this.props.queuedCategory}
                onValueChange={ (itemValue, itemIndex) => { this.props.handleCategorySelected(itemValue, itemIndex) } }
              >
              { categoriesAsPickerItems  }
              <Picker.Item label='Create New Category' value='new' />
             </Picker>
 
+            <Text
+            style={styles.estimateText}
+            >
+            { '0' + Number(this.props.estimatedDurationOfQueuedOutcome).toFixed(2) }
+            </Text>
+
             <TextInput
+             style={styles.giveItABorder}
              placeholder='Title of Outcome'
              onChangeText={ (text) => { this.props.setTitleOfQueuedOutcome(text) } }
+             value={this.props.titleOfQueuedOutcome}
             />
 
 
-             <Text
-             style={styles.estimateText}
-             >
-             { '0' + Number(this.props.estimatedDurationOfQueuedOutcome).toFixed(2) }
-             </Text>
 
 
              < Button title="˅"  onPress={ this.props.handleDecreaseEstimate } />
@@ -162,7 +175,7 @@ export default class App extends React.Component {
 
     this.state = {
 
-      currentOutcome: null,
+      currentOutcome: '',
       currentOutcomeTitle: null,
       currentTime: null,
       startTimeOfCurrentOutcome: null,
@@ -175,7 +188,7 @@ export default class App extends React.Component {
       // newCategoryName: '',
 
       queuedCategory: null, // is an object
-      titleOfQueuedOutcome: null,
+      titleOfQueuedOutcome: '',
       estimatedDurationOfQueuedOutcome: 0, // is 1 = 1 hr
     }
 
@@ -299,6 +312,12 @@ export default class App extends React.Component {
       alert( 'Set an Estimate');
       return;
     } else {
+
+      console.log( "queuedCategory:\n");
+      console.log( this.state.queuedCategory );
+      console.log( this.state.categories[0] );
+      console.log( typeof(this.state.queuedCategory) != typeof(this.state.categories[0]) );
+
       let date = new Date();
       let currentTime = date.getTime();
       if ( this.state.currentTime > this.state.estimatedCompletionTimeOfCurrentOutcome ){ // create an outcome entry for idle
@@ -319,11 +338,11 @@ export default class App extends React.Component {
         tx.executeSql( addOutcomeLogEntry, [ currentTime, stateCopy.estimatedCompletionTimeOfCurrentOutcome, stateCopy.currentOutcomeTitle, stateCopy.currentOutcome.category_id ], ()=>{}, logIt);
 
 
-        tx.executeSql( getLastNOutcomeLogEntries, [ 100 ], ( this_transaction, results) =>{
+        tx.executeSql( getLastNOutcomeLogEntries, [ 2 ], ( this_transaction, results) =>{
           console.log(results);
         }, logIt);
 
-        stateCopy.queuedCategory = null;
+        stateCopy.queuedCategory = '';
         stateCopy.titleOfQueuedOutcome = null;
         stateCopy.estimatedDurationOfQueuedOutcome = 0;
 
@@ -349,13 +368,14 @@ export default class App extends React.Component {
       this.setState( stateCopy );
     }, 1000);
   }
+
   componentWillUnmount(){
     clearInterval(this.timeKeeper);
   }
 
   render(){
     return(
-      <View style={styles.container}>
+      <View style={styles.entireView}>
           <CurrentOutcomeHeader
             currentOutcome={this.state.currentOutcome}
             currentOutcomeTitle={this.state.currentOutcomeTitle}
@@ -376,16 +396,17 @@ export default class App extends React.Component {
             queuedCategory={this.state.queuedCategory}
             newCategoryName={this.state.newCategoryName}
             setTitleOfQueuedOutcome={this.setTitleOfQueuedOutcome}
-
+            titleOfQueuedOutcome={this.state.titleOfQueuedOutcome}
           />
 
-          <StartButton
+          <CustomButton
             handleStartOutcome={this.handleStartOutcome}
+            textToShow={'START'}
           />
 
 
           <DialogInput
-            isDialogVisible={typeof(this.state.queuedCategory) == typeof('new')}
+            isDialogVisible={( (typeof(this.state.queuedCategory) == typeof('new'))  && (this.state.queuedCategory == 'new') ) }
             title={'New Category'}
             hintInput={'Enter New Category'}
             submitInput={ (inputText) => { this.createNewCategory(inputText) } }
@@ -398,24 +419,38 @@ export default class App extends React.Component {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  entireView:{
+    // borderWidth: 2,
+    // borderRadius: 2,
     paddingTop: 25,
+    paddingHorizontal: 10,
+    backgroundColor: '#737B7F',
+    flex: 1,
+    // fontFamily: 'Roboto',
+  },
+  container: {
     // backgroundColor: '#fff', // #37FF96
     // alignItems: 'center',
     // justifyContent: 'center',
-    paddingHorizontal: 10,
     // backgroundColor: '#16a1f7',
   },
   currentOutcomeHeader:{
     textAlign: 'center',
+    color: "#fff",
     fontSize: 20,
     maxHeight: 65,
     paddingBottom: 10,
     paddingHorizontal: 10,
+    marginTop: 15,
+    marginBottom: 5,
     // flex: 1/12,
   },
   pickerGroup: {
-    borderWidth: 1
+    borderRadius: 1,
+    borderColor: '#000',
+    borderWidth: 1,
+    // alignItems: 'center',
+    // justifyContent: 'center',
   },
   timerDisplay:{
     textAlign: 'center',
@@ -432,8 +467,20 @@ const styles = StyleSheet.create({
     minHeight: 80,
   },
   newOutcomeInputGroup: {
-    backgroundColor: '#fff',
-    marginBottom: 5
+    backgroundColor: '#E6F5FF',
+    marginBottom: 5,
+    // paddingHorizontal: 20,
+    borderRadius: 1,
+    borderColor: '#000',
+    borderWidth: 1,
+    marginTop: 20,
+    marginBottom: 35,
+  },
+  giveItABorder: {
+    borderRadius: 1,
+    borderColor: '#000',
+    borderWidth: 1,
+    textAlign: 'center',
   },
   estimateText: {
     // flex: 1,
@@ -442,7 +489,27 @@ const styles = StyleSheet.create({
     // fontSize: 50,
     borderRadius: 1,
     borderColor: '#000',
-    borderWidth: 1
+    borderWidth: 1,
+    fontSize: 20,
+    paddingTop: 5,
+    paddingBottom: 5,
+  },
+  /* Here style the text of your button */
+  customBtnText: {
+      fontSize: 70,
+      fontWeight: '400',
+      color: "#fff",
+      textAlign: 'center',
+      paddingVertical: 20,
+  },
+/* Here style the background of your button */
+  customBtnBG: {
+  backgroundColor: "#007aff",
+  paddingHorizontal: 30,
+  // paddingVertical: 1,
+  borderRadius: 5,
+  borderWidth: 1,
+  borderColor: '#000',
   }
 
 });
